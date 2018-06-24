@@ -1,9 +1,13 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import requests
 import logging
 import time
 import chardet
 import base64
+from argparse import ArgumentParser
 from collections import deque
 from threading import Thread
 from lxml import etree, cssselect, html
@@ -83,13 +87,9 @@ def threaded_crawl(tid, n, max_depth = 10, output_dir="."):
                 frontier.append(link)
         logger.info('Frontier: {}'.format(len(frontier)))
 
-def main():
+def main(num_threads, seed, max_depth, output_dir):
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
-    num_threads = 5
-    seed = 1000
-    max_depth = 10
-    output_dir = "output"
     for i in range(num_threads):
         thread = Thread(target = threaded_crawl,\
                 args=(i, seed/num_threads,max_depth, output_dir))
@@ -99,4 +99,19 @@ def main():
         thread.join()
 
 if __name__ == '__main__':
-    main()
+    seed = 10
+    parser = ArgumentParser()
+    parser.add_argument("-t", "--threads", dest="num_threads", \
+            help="number of threads to spawn")
+    parser.add_argument("-n", "--num-seeds", dest="seed", \
+            help="the number of links to use for the initial seed")
+    parser.add_argument("-d", "--max-depth", dest="max_depth", \
+            help="the maximum depth of links to crawl")
+    parser.add_argument("-o", "--output-dir", dest="output_dir",\
+            help="directory in which to dump data throughout the crawl")
+    args = parser.parse_args()
+    num_threads = int(args.num_threads) if args.num_threads else 5
+    seed = int(args.seed) if args.seed else 1000
+    max_depth = int(args.max_depth) if args.max_depth else 10
+    output_dir = args.output_dir if args.output_dir else "."
+    main(num_threads, seed, max_depth, output_dir)
