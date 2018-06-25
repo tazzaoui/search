@@ -31,14 +31,16 @@ def parse_url(url, save_dir="."):
     while status != 200 and attempts > 0:
         try:
             r = requests.get(url, headers=headers)
-        except ConnectionError as e:
+        except Exception as e:
+            logger = logging.getLogger('__main__')
+            logger.error("[{}] {}".format(url, str(e)))
             return urls
         status = r.status_code
         attempts -= 1
     if attempts > 0:
         content = r.text.encode()
         encoding = chardet.detect(content)['encoding']
-        if encoding != 'utf-8':
+        if encoding != 'utf-8' and hasattr(content, 'encode'):
             content = content.decode(encoding, 'replace').encode('utf-8')
         path = os.path.join(save_dir.encode(), base64.b16encode(url.encode()))
         with open (path, "w") as f:
@@ -60,7 +62,7 @@ def threaded_crawl(tid, n, max_depth = 10, output_dir="."):
     linum = 0
     start = tid*n       # First seed site to crawl
     end = tid*n + n     # Last seed site to crawl 
-    seed = BloomFilter(1000000, 0.1, '/tmp/{}.bloom'.format(tid).encode())
+    seed = BloomFilter(n*max_depth*1000, 0.1, '/tmp/{}.bloom'.format(tid).encode())
     frontier = deque()
     frontier.append(sentinel)
     logger.info('Loading seed URLs {} - {}'.format(start, end))
@@ -73,12 +75,16 @@ def threaded_crawl(tid, n, max_depth = 10, output_dir="."):
     fptr.close()
     while depth < max_depth:
         url = frontier.popleft()
+        urls = []
         if url == sentinel:
             depth += 1
             logger.info('Depth = {}'.format(depth))
             frontier.append(sentinel)
             url = frontier.popleft()
-        urls = parse_url(url, output_dir)
+        try:
+            urls = parse_url(url, output_dir)
+        except Exception as e:
+            logger.error("[{}] Fatal error occured while crawling.".format(url))
         logger.info('Crawled {} & found {} links'.format(url, len(urls)))
         for u in urls:
             link = u.encode()
@@ -99,7 +105,6 @@ def main(num_threads, seed, max_depth, output_dir):
         thread.join()
 
 if __name__ == '__main__':
-    seed = 10
     parser = ArgumentParser()
     parser.add_argument("-t", "--threads", dest="num_threads", \
             help="number of threads to spawn")
