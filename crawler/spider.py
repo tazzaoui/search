@@ -7,29 +7,13 @@ import logging
 import time
 import chardet
 import base64
+from random import randint
+from queue import Queue
 from argparse import ArgumentParser
 from collections import deque
 from threading import Thread
 from lxml import etree, cssselect, html
 from pybloomfilter import BloomFilter
-from requests.exceptions import ConnectionError
-
-def fetch_proxies(n):
-    '''
-    - Fetch a list of n U.S. based http proxy servers via pubproxy.com
-    '''
-    proxies = []
-    while len(proxies) < n:
-        try:
-            r = requests.get("http://pubproxy.com/api/proxy?\
-                limit={}&format=txt&http=true&country=US&type=http".format(n))
-        except Exception as e:
-            logger = logging.getLogger("__main__")
-            logger.error("[proxy] Failed to genarate proxy")
-            return proxies
-        for p in r.text.split():
-            proxies.append(p)
-    return proxies
 
 def parse_url(url, proxy=None, save_dir="."):
     '''
@@ -76,12 +60,13 @@ def threaded_crawl(tid, n, max_depth = 10, output_dir="."):
     logger = logging.getLogger("[tid {}]".format(tid))
     logger.addHandler(fh)
     fptr = open("top-1m.csv", "r")
-    fail_thresh = 5 # Use a different proxy after 5 failed requests in a row
+    fail_thresh = 10 # Use a different proxy after 10 failed requests in a row
     failures = 0
     proxy = dict()
+    global proxies
     sentinel = "SENTINEL"
     depth = -1
-    linum = 0
+    linum = parsed = 0
     start = tid*n   # First seed site to crawl
     end = tid*n + n # Last seed site to crawl 
     seed = BloomFilter(n*max_depth*1000, 0.1, '/tmp/{}.bloom'.format(tid).encode())
@@ -111,24 +96,23 @@ def threaded_crawl(tid, n, max_depth = 10, output_dir="."):
         if len(urls) == 0:
             failures += 1
             if failures > fail_thresh:
-                logger.info("{} failures in a row...generating proxy".format(fail_thresh))
-                time.sleep(1)
-                p = fetch_proxies(1)
-                if(len(p) > 0 and p[0] != 'We'):
-                    proxy['http'] = p[0]
-                    failures = 0
-        else:
-            failures = 0
-            for u in urls:
-                link = u.encode()
-                if link not in seed:
-                    seed.add(link)
-                    frontier.append(link)
-            logger.info('Frontier: {}'.format(len(frontier)))
+                proxy['http'] = proxies[randint(0, len(proxies) - 1)]
+                logger.error("[Failure] Activating proxy:{}".format(proxy['http']))
+                failures = 0
+        for u in urls:
+            link = u.encode()
+            if link not in seed:
+                seed.add(link)
+                frontier.append(link)
+        logger.info('Frontier: {}'.format(len(frontier)))
 
 def main(num_threads, seed, max_depth, output_dir):
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
+    logging.info("Generating proxy list...")
+    os.system('curl\
+    "http://pubproxy.com/api/proxy?limit=100&format=txt&http=true&country=US&type=http"\
+    -o proxy-list.txt')
     for i in range(num_threads):
         thread = Thread(target = threaded_crawl,\
                 args=(i, seed/num_threads,max_depth, output_dir))
@@ -152,4 +136,6 @@ if __name__ == '__main__':
     seed = int(args.seed) if args.seed else 1000
     max_depth = int(args.max_depth) if args.max_depth else 10
     output_dir = args.output_dir if args.output_dir else "."
+    with open('proxy-list.txt', 'r') as f:
+        proxies = [x.strip() for x in f.readlines()]
     main(num_threads, seed, max_depth, output_dir)
