@@ -12,7 +12,8 @@ from queue import Queue
 from argparse import ArgumentParser
 from collections import deque
 from threading import Thread
-from lxml import etree, cssselect, html
+from lxml import html
+from lxml.cssselect import CSSSelector
 from pybloomfilter import BloomFilter
 
 def parse_url(url, proxy=None, save_dir="."):
@@ -28,8 +29,11 @@ def parse_url(url, proxy=None, save_dir="."):
     urls = []
     h = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:10.0)\
             Gecko/20100101 Firefox/10.0', 'Accept-Language':'en-US',}
+    url = str(url, "utf-8") if not isinstance(url, str) else url
+    save_dir = str(save_dir, "utf-8") if not isinstance(save_dir, str) else save_dir
     while status != 200 and attempts > 0:
         try:
+            print("URL: {}".format(url))
             r = requests.get(url, headers=h, proxies=proxy)
         except Exception as e:
             logger = logging.getLogger('__main__')
@@ -38,19 +42,13 @@ def parse_url(url, proxy=None, save_dir="."):
         status = r.status_code
         attempts -= 1
     if attempts > 0:
-        content = r.text.encode()
-        encoding = chardet.detect(content)['encoding']
-        if encoding != 'utf-8' and hasattr(content, 'encode'):
-            content = content.decode(encoding, 'replace').encode('utf-8')
-        path = os.path.join(save_dir.encode(), base64.b16encode(url.encode()))
-        with open (path, "w") as f:
+        dest = os.path.join(save_dir.encode(), base64.b16encode(url.encode()))
+        with open (dest, "w") as f:
             f.write(r.text)
-        data = html.document_fromstring(content)
-        data.make_links_absolute(url, resolve_base_href=True)
-        urls = data.xpath('//a/@href')
-        for idx, item in enumerate(urls):
-            if urls[idx][0] == '/':
-                urls[idx] = url + urls[idx][1:]
+        dom = html.fromstring(r.text)
+        dom.make_links_absolute(url, resolve_base_href=True)
+        anchor_selector = CSSSelector('a')
+        urls = [str(e.get('href')) for e in anchor_selector(dom)]
     return urls
 
 def threaded_crawl(tid, n, max_depth = 10, output_dir="."):
