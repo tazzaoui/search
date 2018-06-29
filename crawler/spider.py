@@ -4,17 +4,18 @@
 import os
 import requests
 import logging
-import time
-import chardet
 import base64
+import datetime
 from random import randint
-from queue import Queue
 from argparse import ArgumentParser
 from collections import deque
-from threading import Thread
+from threading import Thread, Lock
 from lxml import html
 from lxml.cssselect import CSSSelector
 from pybloomfilter import BloomFilter
+
+count = 0
+failures = 0
 
 def parse_url(url, proxy=None, save_dir="."):
     '''
@@ -33,11 +34,10 @@ def parse_url(url, proxy=None, save_dir="."):
     save_dir = str(save_dir, "utf-8") if not isinstance(save_dir, str) else save_dir
     while status != 200 and attempts > 0:
         try:
-            print("URL: {}".format(url))
             r = requests.get(url, headers=h, proxies=proxy)
         except Exception as e:
-            logger = logging.getLogger('__main__')
-            logger.error("[{}] {}".format(url, str(e)))
+            logger = logging.getLogger(__name__)
+            logger.error("[tid {}] URL: {} Error Msg: {}".format(tid, url, str(e)))
             return urls
         status = r.status_code
         attempts -= 1
@@ -51,26 +51,20 @@ def parse_url(url, proxy=None, save_dir="."):
         urls = [str(e.get('href')) for e in anchor_selector(dom)]
     return urls
 
-def threaded_crawl(tid, n, max_depth = 10, output_dir="."):
-    logging.basicConfig(level=logging.INFO)
-    fh = logging.FileHandler("logs/{}.log".format(tid))
-    fh.setLevel(logging.INFO)
-    logger = logging.getLogger("[tid {}]".format(tid))
-    logger.addHandler(fh)
+def threaded_crawl(tid, n, proxies, lock, output_dir="."):
+    global count
+    global failures
+    fails = 0
+    logger = logging.getLogger(__name__)
     fptr = open("top-1m.csv", "r")
-    fail_thresh = 10 # Use a different proxy after 10 failed requests in a row
-    failures = 0
+    fail_thresh = 10 # Use a different proxy after 10 failed requests in a row 
     proxy = dict()
-    global proxies
-    sentinel = "SENTINEL"
-    depth = -1
-    linum = parsed = 0
+    linum = fails = 0
     start = tid*n   # First seed site to crawl
     end = tid*n + n # Last seed site to crawl 
-    seed = BloomFilter(n*max_depth*1000, 0.1, '/tmp/{}.bloom'.format(tid).encode())
+    seed = BloomFilter(n*1000000, 0.1, '/tmp/{}.bloom'.format(tid).encode())
     frontier = deque()
-    frontier.append(sentinel)
-    logger.info('Loading seed URLs {} - {}'.format(start, end))
+    logger.info('[tid {}] Loading seed URLs {} - {}'.format(tid, start, end))
     for line in fptr:
         if linum >= start and linum < end:
             url = "http://" + line.split(',')[1].strip()
@@ -78,42 +72,47 @@ def threaded_crawl(tid, n, max_depth = 10, output_dir="."):
             frontier.append(url)
         linum += 1
     fptr.close()
-    while depth < max_depth:
+    while True:
         url = frontier.popleft()
         urls = []
-        if url == sentinel:
-            depth += 1
-            logger.info('Depth = {}'.format(depth))
-            frontier.append(sentinel)
-            url = frontier.popleft()
         try:
             urls = parse_url(url, proxy, output_dir)
         except Exception as e:
-            logger.error("[{}] Fatal error occured while crawling.".format(url))
-        logger.info('Crawled {} & found {} links'.format(url, len(urls)))
+            logger.error("[tid {}] Fatal error occured while crawling: {}.".format(tid, url))
         if len(urls) == 0:
-            failures += 1
-            if failures > fail_thresh:
+            with lock:
+                failures += 1
+            fails += 1
+            if fails > fail_thresh:
                 proxy['http'] = proxies[randint(0, len(proxies) - 1)]
-                logger.error("[Failure] Activating proxy:{}".format(proxy['http']))
-                failures = 0
+                logger.error("[tid {}] Failure: Activating proxy:{}".format(tid, proxy['http']))
+                fails = 0
         for u in urls:
             link = u.encode()
             if link not in seed:
                 seed.add(link)
                 frontier.append(link)
-        logger.info('Frontier: {}'.format(len(frontier)))
+        with lock:
+            count += 1
+            if(count % 1000 == 0):
+                logger.info('Page count: '.format(count))
+        if len(frontier) % 1000 == 0:
+            logger.info("[tid {}] Frontier count: {}".format(tid, len(frontier)))
 
-def main(num_threads, seed, max_depth, output_dir):
-    logging.basicConfig(level=logging.INFO)
+def main(num_threads, seed, output_dir):
+    logging.basicConfig(filename="{}.log".format(str(datetime.datetime.now())),\
+            level=logging.INFO, format="%(asctime)s:%(levelname)s:%(message)s")
     logger = logging.getLogger(__name__)
     logging.info("Generating proxy list...")
     os.system('curl\
     "http://pubproxy.com/api/proxy?limit=100&format=txt&http=true&country=US&type=http"\
     -o proxy-list.txt')
+    with open('proxy-list.txt', 'r') as f:
+        proxies = [x.strip() for x in f.readlines()]
+    lock = Lock()
     for i in range(num_threads):
         thread = Thread(target = threaded_crawl,\
-                args=(i, seed/num_threads,max_depth, output_dir))
+                args=(i, seed/num_threads, proxies, lock, output_dir))
         logger.info("Launching thread {}\n".format(i))
         thread.start()
     for i in range(num_threads):
@@ -125,15 +124,10 @@ if __name__ == '__main__':
             help="number of threads to spawn")
     parser.add_argument("-n", "--num-seeds", dest="seed", \
             help="the number of links to use for the initial seed")
-    parser.add_argument("-d", "--max-depth", dest="max_depth", \
-            help="the maximum depth of links to crawl")
     parser.add_argument("-o", "--output-dir", dest="output_dir",\
             help="directory in which to dump data throughout the crawl")
     args = parser.parse_args()
     num_threads = int(args.num_threads) if args.num_threads else 5
     seed = int(args.seed) if args.seed else 1000
-    max_depth = int(args.max_depth) if args.max_depth else 10
     output_dir = args.output_dir if args.output_dir else "."
-    with open('proxy-list.txt', 'r') as f:
-        proxies = [x.strip() for x in f.readlines()]
-    main(num_threads, seed, max_depth, output_dir)
+    main(num_threads, seed, output_dir)
