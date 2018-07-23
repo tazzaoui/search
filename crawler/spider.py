@@ -95,7 +95,7 @@ def threaded_crawl(tid, n, proxies, lock, output_dir="."):
         with lock:
             count += 1
             if(count % 1000 == 0):
-                logger.info('Page count: '.format(count))
+                logger.info('Page count: {}'.format(count))
         if len(frontier) % 1000 == 0:
             logger.info("[tid {}] Frontier count: {}".format(tid, len(frontier)))
 
