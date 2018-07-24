@@ -8,8 +8,6 @@
 
 import os
 import pymongo
-import time
-import sys
 from progress.bar import IncrementalBar
 from argparse import ArgumentParser
 
