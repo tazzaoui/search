@@ -3,52 +3,41 @@
 
 '''
 - This script defines a mapping between documents and document ids
-- It then saves this mapping into a mysql database whose configuration
-  is to be specified in a yaml file passed through the command line
-  (see db-config.yml).
+- It then saves this mapping into a non-relational database (mongodb)
 '''
 
 import os
+import pymongo
+import time
 import sys
-import pymysql
-import yaml
+from progress.bar import IncrementalBar
 from argparse import ArgumentParser
 
-def map_sites(path, config):
-    with open(config) as f:
-        cfg = yaml.load(f)
-
-    # Connect to the database
-    connection = pymysql.connect(host=cfg['host'],
-                                user=cfg['user'],
-                                db=cfg['db_name'],
-                                charset="utf8",
-                                autocommit=True,
-                                use_unicode=True,
-                                cursorclass=pymysql.cursors.DictCursor)
-
+def map_sites(path):
+    client = pymongo.MongoClient()
+    db = client.search_engine
+    db.doc_ids.drop()
+    db.create_collection("doc_ids",
+                         storageEngine={'wiredTiger':{'configString':'block_compressor=zlib'}})
     document_dir = os.fsencode(path)
-    index = 0
-
+    index = document_count = 0
+    for i in os.listdir(document_dir):
+        document_count += 1
+    bar = IncrementalBar('Processing...', max=21, suffix="%(percent)d%%")
     for document in os.listdir(document_dir):
         filename = os.fsdecode(document)
-        with connection.cursor() as cursor:
-            sql = "INSERT INTO `Site-Map` (`ID`, `URL`) VALUES ('%s','%s');"
-            #print(sql % (index, filename))
-            cursor.execute(sql % (index, filename))
-            index += 1
-
-    connection.close()
-
+        doc = {"_id": index, "URL": filename}
+        db.doc_ids.insert_one(doc)
+        if(index % int(document_count / 20) == 0):
+            bar.next()
+        index += 1
+    bar.finish()
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("-c", "--config", dest="config", \
-            help="Path of configuration file")
     parser.add_argument("-d", "--directory", dest="directory", \
-            help="Path of configuration file")
+                        help="Path of configuration file")
     args = parser.parse_args()
-    config = args.config if args.config else "db-config.yml"
     directory = args.directory if args.directory else "output"
-    assert os.path.exists(config), "Nonexistent configuration file"
-    map_sites(directory, config)
+    assert os.path.exists(directory), "Nonexistent directory"
+    map_sites(directory)
