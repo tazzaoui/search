@@ -1,0 +1,5 @@
+# This file contains the database configuration for the indexer
+host: '127.0.0.1'
+user: 'root'
+password: ''
+db_name: 'Search-Engine'
