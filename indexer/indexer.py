@@ -7,6 +7,7 @@ import yaml
 import nltk
 import base64
 import pymysql
+import logging
 from bs4 import BeautifulSoup
 from progress.bar import IncrementalBar
 from nltk.stem.snowball import SnowballStemmer
@@ -15,17 +16,23 @@ class Indexer:
     def __init__(self, path="documents", config="db-config.yml"):
         assert os.path.isdir(path), "Nonexistent document directory"
         assert os.path.exists(config), "Nonexistent configuration file"
+        self.logger = logging.getLogger("indexer")
+        self.logger.setLevel(logging.DEBUG)
+        fh = logging.FileHandler("indexer.log")
+        fh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        self.logger.addHandler(fh)
         self.path = path
         self.config = config
         with open(self.config) as f:
             cfg = yaml.load(f)
         self.connection = pymysql.connect(host=cfg['host'],
-                                     user=cfg['user'],
-                                     charset="utf8",
-                                     autocommit=True,
-                                     use_unicode=True,
-                                     cursorclass=pymysql.cursors.DictCursor)
+                                          user=cfg['user'],
+                                          charset="utf8",
+                                          autocommit=True,
+                                          use_unicode=True,
+                                          cursorclass=pymysql.cursors.DictCursor)
         self.connection.cursor().execute("CREATE SCHEMA IF NOT EXISTS `{}`;".format(cfg['db_name']))
+        self.logger.info("Created Database `Search-Engine`")
 
     @staticmethod
     def visible(element):
@@ -47,10 +54,11 @@ class Indexer:
         is to be specified in a yaml file passed through the constructor
         (see db-config.yml).
         '''
-        self.connection.cursor().execute("DROP TABLE IF EXISTS `Search-Engine`.`doc_map`")
-        self.connection.cursor().execute("CREATE TABLE `Search-Engine`.`doc_map` (\
+        self.connection.cursor().execute("DROP TABLE IF EXISTS `Search-Engine`.`docs`")
+        self.connection.cursor().execute("CREATE TABLE `Search-Engine`.`docs` (\
         `ID` INT NOT NULL , `URL` VARCHAR(255) NOT NULL , PRIMARY KEY (`ID`))\
         ENGINE = InnoDB;")
+        self.connection.cursor().execute("USE `Search-Engine`;")
         document_dir = os.fsencode(self.path)
         index = document_count = 0
         for i in os.listdir(document_dir):
@@ -59,9 +67,10 @@ class Indexer:
         for document in os.listdir(document_dir):
             filename = os.fsdecode(document)
             with self.connection.cursor() as cursor:
-                sql = "INSERT INTO `doc_map` (`ID`, `URL`) VALUES ('%s','%s');"
+                sql = "INSERT INTO `docs` (`ID`, `URL`) VALUES ('%s','%s');"
                 cursor.execute(sql % (index, filename))
                 if(index % int(document_count / 20) == 0):
+                    self.logger.info("[map_documents]: %d/%d", index, document_count)
                     bar.next()
                 index += 1
         bar.finish()
@@ -78,6 +87,7 @@ class Indexer:
         VARCHAR(100) NOT NULL , `DOCS` TEXT NOT NULL , PRIMARY KEY (`TOK`)) ENGINE = InnoDB;")
         self.connection.cursor().execute("USE `Search-Engine`;")
         document_dir = os.fsencode(self.path)
+        count = 0
         for document in os.listdir(document_dir):
             document = document.decode()
             tokens = self.extract_tokens(document)
@@ -94,6 +104,9 @@ class Indexer:
                         sql = "INSERT INTO `tokens` (`TOK`, `DOCS`) VALUES ('%s', '%s')"
                         print(sql % (enc, document))
                         cursor.execute(sql % (enc, document))
+                count += 1
+                if count % 10000 == 0:
+                    self.logger.info("[map_tokens] : Mapped %d tokens", count)
 
     def extract_tokens(self, document, stemming=False):
         '''
