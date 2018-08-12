@@ -5,6 +5,7 @@ import os
 import re
 import yaml
 import nltk
+import base64
 import pymysql
 from bs4 import BeautifulSoup
 from progress.bar import IncrementalBar
@@ -18,13 +19,13 @@ class Indexer:
         self.config = config
         with open(self.config) as f:
             cfg = yaml.load(f)
-        connection = pymysql.connect(host=cfg['host'],
+        self.connection = pymysql.connect(host=cfg['host'],
                                      user=cfg['user'],
                                      charset="utf8",
                                      autocommit=True,
                                      use_unicode=True,
                                      cursorclass=pymysql.cursors.DictCursor)
-        connection.cursor().execute("CREATE SCHEMA IF NOT EXISTS `{}`;".format(cfg['db_name']))
+        self.connection.cursor().execute("CREATE SCHEMA IF NOT EXISTS `{}`;".format(cfg['db_name']))
 
     @staticmethod
     def visible(element):
@@ -46,17 +47,8 @@ class Indexer:
         is to be specified in a yaml file passed through the constructor
         (see db-config.yml).
         '''
-        with open(self.config) as f:
-            cfg = yaml.load(f)
-        connection = pymysql.connect(host=cfg['host'],
-                                     user=cfg['user'],
-                                     db=cfg['db_name'],
-                                     charset="utf8",
-                                     autocommit=True,
-                                     use_unicode=True,
-                                     cursorclass=pymysql.cursors.DictCursor)
-        connection.cursor().execute("DROP TABLE IF EXISTS `Search-Engine`.`doc_map`")
-        connection.cursor().execute("CREATE TABLE `Search-Engine`.`doc_map` (\
+        self.connection.cursor().execute("DROP TABLE IF EXISTS `Search-Engine`.`doc_map`")
+        self.connection.cursor().execute("CREATE TABLE `Search-Engine`.`doc_map` (\
         `ID` INT NOT NULL , `URL` VARCHAR(255) NOT NULL , PRIMARY KEY (`ID`))\
         ENGINE = InnoDB;")
         document_dir = os.fsencode(self.path)
@@ -66,39 +58,68 @@ class Indexer:
         bar = IncrementalBar("Processing...", max = 21, suffix="%(percent)d%%")
         for document in os.listdir(document_dir):
             filename = os.fsdecode(document)
-            with connection.cursor() as cursor:
+            with self.connection.cursor() as cursor:
                 sql = "INSERT INTO `doc_map` (`ID`, `URL`) VALUES ('%s','%s');"
                 cursor.execute(sql % (index, filename))
                 if(index % int(document_count / 20) == 0):
                     bar.next()
                 index += 1
         bar.finish()
-        connection.close()
 
-    def extract_words(self):
+    def map_tokens(self):
         '''
-        - This method defines a mapping between words and word ids
-        - It also keeps track of the documents in which a given word appears
-        - It then saves this data into a mysql database whose configuration is
-        to be specified in a yaml file passed through the constructor
-        (see db-config.yml)
+        - This method defines a mapping between tokens and token-ids.
+        - It then saves this mapping into a mysql database whose configuration
+        is to be specified in a yaml file passed through the constructor
+        (see db-config.yml).
         '''
-        stemmer = SnowballStemmer("english")
+        self.connection.cursor().execute("DROP TABLE IF EXISTS `Search-Engine`.`tokens`")
+        self.connection.cursor().execute("CREATE TABLE `Search-Engine`.`tokens` ( `TOK` \
+        VARCHAR(100) NOT NULL , `DOCS` TEXT NOT NULL , PRIMARY KEY (`TOK`)) ENGINE = InnoDB;")
+        self.connection.cursor().execute("USE `Search-Engine`;")
         document_dir = os.fsencode(self.path)
         for document in os.listdir(document_dir):
-            words = list()
-            terms = dict()
-            with open(os.path.join(self.path, document.decode())) as f:
-                soup = BeautifulSoup(f.read(), "lxml")
-            data = soup.findAll(text=True)
-            clean = [i.lower() for i in list(filter(Indexer.visible, data))]
-            sw = nltk.corpus.stopwords.words('english')
-            for i in clean:
-                tokens = re.findall('\w+', i)
-                for tok in tokens:
-                    if tok not in sw:
-                        #words.append(stemmer.stem(tok))
+            document = document.decode()
+            tokens = self.extract_tokens(document)
+            for tok in tokens:
+                # Add token to the database if it hasn't already sent there
+                enc = base64.b16encode(tok.encode()).decode()
+                with self.connection.cursor() as cursor:
+                    if cursor.execute("SELECT * from `tokens` WHERE TOK='{}'".format(enc)):
+                        docs = cursor.fetchone()['DOCS'].split(',')
+                        docs.append(document)
+                        update_str = ",".join(docs)
+                        cursor.execute("UPDATE `tokens` SET `DOCS`='{}' WHERE 1;".format(update_str))
+                    else:
+                        sql = "INSERT INTO `tokens` (`TOK`, `DOCS`) VALUES ('%s', '%s')"
+                        print(sql % (enc, document))
+                        cursor.execute(sql % (enc, document))
+
+    def extract_tokens(self, document, stemming=False):
+        '''
+        - Given the name of a document located in self.path, this method
+        extracts its contents and returns the tokens it contains.
+        - If stemming is true, only the stem of each token will be returned.
+        '''
+        stemmer = SnowballStemmer("english")
+        words = list()
+        terms = dict()
+        with open(os.path.join(self.path, document)) as f:
+            soup = BeautifulSoup(f.read(), "lxml")
+        data = soup.findAll(text=True)
+        clean = [i.lower() for i in list(filter(Indexer.visible, data))]
+        sw = nltk.corpus.stopwords.words("english")
+        for i in clean:
+            tokens = re.findall("\w+", i)
+            for tok in tokens:
+                if tok not in sw:
+                    if stemming:
+                        words.append(stemmer.stem(tok))
+                    else:
                         words.append(tok)
-            for word in words:
-                terms[word] = 1 if word not in terms else terms[word] + 1
-        print(terms)
+        for word in words:
+            terms[word] = 1 if word not in terms else terms[word] + 1
+        return words
+
+    def __del__(self):
+        self.connection.close()
