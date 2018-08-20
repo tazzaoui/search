@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.7
 # -*- coding: utf-8 -*-
 
 import os
@@ -8,27 +8,23 @@ from indexer import Indexer
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("-c", "--config", dest="config", \
-                        help="Path of configuration file")
-    parser.add_argument("-p", "--path", dest="path", \
-                        help="Path of configuration file")
-    parser.add_argument("-d", "--documents", dest="docs",\
-                        help="Map documents to doc-ids")
-    parser.add_argument("-w", "--words", dest="words",\
-                        action="store_true",\
-                        help="Extract words from docs")
-
+    parser.add_argument("-p", "--path", dest="path", default=None,\
+                        help="Document path")
+    parser.add_argument("-e", "--extract", dest="extract",\
+                        help="Path to an html file from which to extract tokens")
+    parser.add_argument("-v", dest="verbose", action="store_true",\
+                        help="Verbose output")
     args = parser.parse_args()
-    config = args.config if args.config else "db-config.yml"
-    path = args.path if args.path else "test-docs"
-    documents = True if args.docs else False
-    words = True if args.words else False
-
-    indexer = Indexer(path, config)
-    if documents:
-        indexer.map_documents()
-    if words:
-        indexer.map_tokens()
+    path = args.path
+    verbose = True if args.verbose else False
+    indexer = Indexer(verbose, path)
+    if args.extract:
+        string = indexer.extract_tokens(args.extract)
+        with open("output.txt", "w") as w:
+            w.write("{}".format(string))
+        print(string)
+    else:
+        indexer.create_index()
 
 if __name__ == "__main__":
     main()

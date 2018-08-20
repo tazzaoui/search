@@ -3,36 +3,58 @@
 
 import os
 import re
-import yaml
 import nltk
 import base64
-import pymysql
+import pickle
 import logging
 from bs4 import BeautifulSoup
 from progress.bar import IncrementalBar
 from nltk.stem.snowball import SnowballStemmer
 
 class Indexer:
-    def __init__(self, path="documents", config="db-config.yml"):
-        assert os.path.isdir(path), "Nonexistent document directory"
-        assert os.path.exists(config), "Nonexistent configuration file"
+    def __init__(self, verbose=False, path=None):
         self.logger = logging.getLogger("indexer")
         self.logger.setLevel(logging.DEBUG)
         fh = logging.FileHandler("indexer.log")
         fh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
         self.logger.addHandler(fh)
+        self.verbose = verbose
         self.path = path
-        self.config = config
-        with open(self.config) as f:
-            cfg = yaml.load(f)
-        self.connection = pymysql.connect(host=cfg['host'],
-                                          user=cfg['user'],
-                                          charset="utf8",
-                                          autocommit=True,
-                                          use_unicode=True,
-                                          cursorclass=pymysql.cursors.DictCursor)
-        self.connection.cursor().execute("CREATE SCHEMA IF NOT EXISTS `{}`;".format(cfg['db_name']))
-        self.logger.info("Created Database `Search-Engine`")
+
+    def create_index(self):
+        assert os.path.isdir(self.path), "Nonexistent document directory"
+        os.system("rm -rf index; mkdir -p index")
+        document_dir = os.fsencode(self.path)
+        index = document_count = 0
+        for i in os.listdir(document_dir):
+            document_count += 1
+        bar = IncrementalBar("Processing...", max = 21, suffix="%(percent)d%%")
+        for document in os.listdir(document_dir):
+            file_name = os.fsdecode(document)
+            tokens = self.extract_tokens(os.path.join(self.path, file_name))
+            if self.verbose:
+                print("Indexing {}".format(base64.b16decode(document)))
+                print(tokens)
+            for (freq, tok) in tokens:
+                file_name = os.path.join(b"index", base64.b16encode(tok.encode()))
+                try:
+                    f = open(file_name, "rb")
+                    token = pickle.load(f)
+                    f.close()
+                except IOError:
+                    token = []
+                token.append((freq, document))
+                try:
+                    token_file = open(file_name, "wb")
+                    pickle.dump(token, token_file)
+                    token_file.close()
+                except Exception as e:
+                    self.logger.info("[create_index]: {}".format(e))
+                    index -= 1
+            if(index % int(document_count / 20) == 0):
+                self.logger.info("[create_index]: %d/%d", index, document_count)
+                bar.next()
+            index += 1
 
     @staticmethod
     def visible(element):
@@ -47,92 +69,29 @@ class Indexer:
             return False
         return True
 
-    def map_documents(self):
-        '''
-        - This method defines a mapping between documents and document ids
-        - It then saves this mapping into a mysql database whose configuration
-        is to be specified in a yaml file passed through the constructor
-        (see db-config.yml).
-        '''
-        self.connection.cursor().execute("DROP TABLE IF EXISTS `Search-Engine`.`docs`")
-        self.connection.cursor().execute("CREATE TABLE `Search-Engine`.`docs` (\
-        `ID` INT NOT NULL , `URL` VARCHAR(255) NOT NULL , PRIMARY KEY (`ID`))\
-        ENGINE = InnoDB;")
-        self.connection.cursor().execute("USE `Search-Engine`;")
-        document_dir = os.fsencode(self.path)
-        index = document_count = 0
-        for i in os.listdir(document_dir):
-            document_count += 1
-        bar = IncrementalBar("Processing...", max = 21, suffix="%(percent)d%%")
-        for document in os.listdir(document_dir):
-            filename = os.fsdecode(document)
-            with self.connection.cursor() as cursor:
-                sql = "INSERT INTO `docs` (`ID`, `URL`) VALUES ('%s','%s');"
-                cursor.execute(sql % (index, filename))
-                if(index % int(document_count / 20) == 0):
-                    self.logger.info("[map_documents]: %d/%d", index, document_count)
-                    bar.next()
-                index += 1
-        bar.finish()
-
-    def map_tokens(self):
-        '''
-        - This method defines a mapping between tokens and token-ids.
-        - It then saves this mapping into a mysql database whose configuration
-        is to be specified in a yaml file passed through the constructor
-        (see db-config.yml).
-        '''
-        self.connection.cursor().execute("DROP TABLE IF EXISTS `Search-Engine`.`tokens`")
-        self.connection.cursor().execute("CREATE TABLE `Search-Engine`.`tokens` ( `TOK` \
-        VARCHAR(100) NOT NULL , `DOCS` TEXT NOT NULL , PRIMARY KEY (`TOK`)) ENGINE = InnoDB;")
-        self.connection.cursor().execute("USE `Search-Engine`;")
-        document_dir = os.fsencode(self.path)
-        count = 0
-        for document in os.listdir(document_dir):
-            document = document.decode()
-            tokens = self.extract_tokens(document)
-            for tok in tokens:
-                # Add token to the database if it hasn't already sent there
-                enc = base64.b16encode(tok.encode()).decode()
-                with self.connection.cursor() as cursor:
-                    if cursor.execute("SELECT * from `tokens` WHERE TOK='{}'".format(enc)):
-                        docs = cursor.fetchone()['DOCS'].split(',')
-                        docs.append(document)
-                        update_str = ",".join(docs)
-                        cursor.execute("UPDATE `tokens` SET `DOCS`='{}' WHERE 1;".format(update_str))
-                    else:
-                        sql = "INSERT INTO `tokens` (`TOK`, `DOCS`) VALUES ('%s', '%s')"
-                        print(sql % (enc, document))
-                        cursor.execute(sql % (enc, document))
-                count += 1
-                if count % 10000 == 0:
-                    self.logger.info("[map_tokens] : Mapped %d tokens", count)
-
-    def extract_tokens(self, document, stemming=False):
+    def extract_tokens(self, path):
         '''
         - Given the name of a document located in self.path, this method
-        extracts its contents and returns the tokens it contains.
-        - If stemming is true, only the stem of each token will be returned.
+        extracts its contents and returns a list of pairs
+        [(x, y) | x = the frequency of the token, y = the token itself].
         '''
         stemmer = SnowballStemmer("english")
         words = list()
         terms = dict()
-        with open(os.path.join(self.path, document)) as f:
+        with open(path) as f:
             soup = BeautifulSoup(f.read(), "lxml")
         data = soup.findAll(text=True)
         clean = [i.lower() for i in list(filter(Indexer.visible, data))]
         sw = nltk.corpus.stopwords.words("english")
         for i in clean:
+            tok_freq = 0
             tokens = re.findall("\w+", i)
             for tok in tokens:
                 if tok not in sw:
-                    if stemming:
-                        words.append(stemmer.stem(tok))
-                    else:
-                        words.append(tok)
+                    words.append(stemmer.stem(tok))
         for word in words:
             terms[word] = 1 if word not in terms else terms[word] + 1
-        return words
+        return set([(terms[i], i) for i in words])
 
     def __del__(self):
-        self.connection.close()
+        self.logger.info("Object destroyed")
