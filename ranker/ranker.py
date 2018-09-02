@@ -2,21 +2,26 @@
 # -*- coding: utf-8 -*-
 
 import os
+import math
 import base64
 import pickle
+from support.token_extractor import extract_tokens
 
 class Ranker:
-    def __init__(self, search_term, docs_path=b"test-docs"):
-        self.tf = 0
-        self.idf = 0
+    def __init__(self, search_term, index_path):
+        total_docs = 100
         self.term = search_term
-        self.docs_path = docs_path
-
+        self.index_path = index_path
         search_results = self.search()
-        if search_results is None:
-            self.search_results = None
-        else:
-            self.search_results = [(x, base64.b16decode(y)) for (x, y) in search_results]
+        self.search_results = [(x, base64.b16decode(y)) for (x, y) \
+                              in search_results] if search_results else None
+        self.tf = [freq for (freq, url) in self.search_results]
+        # Create the document vector
+        i = 0
+        for doc in self.search_results:
+            document_vector = vectorize_document(doc)
+            self.tf[i] /= euclidean_norm(document_vector)
+        self.idf = math.log(total_docs / len(self.search_results))
 
     def search(self):
         """
@@ -24,7 +29,7 @@ class Ranker:
         (x, y) s.t. x = a document & y = the term's document frequency
         """
         encoded_term = base64.b16encode(self.term)
-        index_path = os.path.abspath(self.docs_path)
+        index_path = os.path.abspath(self.index_path)
         term_file = os.path.join(index_path, encoded_term.decode())
         if not os.path.exists(term_file):
             print("The term '{}' was not found".format(self.term.decode()))
@@ -32,5 +37,30 @@ class Ranker:
         with open(term_file, "rb") as index_file:
             return pickle.load(index_file)
 
+    def list_terms(self):
+        """
+        @return list: A list of tupples representing the terms available in the index.
+        """
+        terms = []
+        for term in os.listdir(self.index_path):
+            terms.append(base64.b16decode(term).decode())
+        return terms
+
     def get_results(self):
+        """
+        @return list:  A list of tupples representing the term's search results
+        """
         return self.search_results
+
+def vectorize_document(doc_path):
+    """
+    @param doc_path: The path to a file representing
+                     a document in the corpus
+    @return list:    An n-dimensional vector of term frequencies
+                     where n is the number of unique terms in the document.
+    """
+    counts = dict()
+    tokens = extract_tokens(os.path.abspath(doc_path))
+    for token in tokens:
+        counts[token] = counts[token] + 1 if token in counts else 1
+    return counts.values()
