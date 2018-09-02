@@ -7,8 +7,10 @@ used for modeling the corpus and ranking documents.
 """
 
 import os
-import math
-from support.token import extract_tokens
+import base64
+import pickle
+import numpy as np
+from support.token_extract import extract_tokens
 
 class Vector:
     """
@@ -20,12 +22,21 @@ class Vector:
         @param doc_path: The path to a file representing
                          a document in the corpus
         """
-        assert os.path.exists(doc_path), "No such path {}:".format(doc_path)
-        counts = dict()
+        doc_path = os.path.abspath(doc_path)
+        assert os.path.exists(doc_path), "No such path: {}".format(doc_path)
+        if not os.path.exists("unique_terms.pickle"):
+            unique_terms = set()
+            for term_file in os.listdir(doc_path):
+                unique_terms.add(base64.b16decode(term_file))
+            unique_terms = list(unique_terms)
+            with open("unique_terms.pickle", "wb") as output_file:
+                pickle.dump(list(unique_terms, output_file))
+        else:
+            with open("unique_terms.pickle", "rb") as input_file:
+                unique_terms = pickle.load(input_file)
+
         tokens = extract_tokens(os.path.abspath(doc_path))
-        for token in tokens:
-            counts[token] = counts[token] + 1 if token in counts else 1
-        self.values = counts.values()
+        self.values = np.array([int(term in tokens) for term in unique_terms])
 
     def __mul__(self, other):
         """
@@ -36,24 +47,18 @@ class Vector:
                         multiplied by the constant.
         """
         if isinstance(other, (int, float)):
-            return [val * other for val in self.values]
+            return other * self.values
         if isinstance(other, Vector):
-            assert len(other.values) == len(self.values)
-            result = 0
-            for element in range(len(self.values)):
-                result += self.values[element] * other.values[element]
-            return result
-        raise ValueError("Vector multiplication is only defined for scalars or other vectors")
+            assert len(self.values()) == len(other.values())
+            return np.dot(self.values(), other.values())
+        raise ValueError("Vector multiplication is defined only for scalars or other vectors")
 
     def euclidean_norm(self):
         """
         @param vector: An n-dimensional vector (list of numbers)
         @return float: The euclidean norm of the vector
         """
-        sum_of_squares = 0
-        for element in self.values:
-            sum_of_squares += element**2
-        return math.sqrt(sum_of_squares)
+        return np.linalg.norm(self.values)
 
     def cosine_similarity(self, vector):
         """
