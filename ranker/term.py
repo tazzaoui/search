@@ -14,12 +14,20 @@ class Term:
     as wel the term's frequency within each document.
     """
 
-    def __init__(self, search_term, index_path):
+    def __init__(self, search_term):
         self.__term = str(search_term)
-        self.__index_path = index_path
-        self.__exists = bool(self.search is not None)
-        self.__term_frequencies = [freq for (freq, url) in self.search()]
-        self.__search_results = [url for (freq, url) in self.search()]
+        self.__index_path = "../../index" #TODO: hard-coded (fix me)
+
+        search_result = self.search()
+        self.__exists = bool(search_result is not None)
+
+        # Document frequency: the number of docs containing the term
+        self.__doc_frequency = len(search_result)
+
+        # Term frequency: the number of occurances of the term in each doc
+        self.__term_frequencies = dict()
+        for (freq, url) in search_result:
+            self.__term_frequencies[url] = freq
 
     def search(self):
         """
@@ -48,14 +56,21 @@ class Term:
         @return list:  A list of strings representing the document-id of every
         document that contains the term
         """
-        return self.__search_results
+        return list(self.__term_frequencies.keys())
 
     def get_term_frequencies(self):
         """
-        @return list:  A list of integers represting the term's frequency in
-                       document i
+        @return dict: A dictionary of the format dict[url] = frequency
         """
         return self.__term_frequencies
+
+    def get_document_frequency(self):
+        """
+        @return int: An integer represting the term's document frequency
+                     i.e. The # of docs containing the term
+        """
+        return self.__doc_frequency
+
 
     def exists(self):
         """
