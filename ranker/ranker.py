@@ -5,7 +5,8 @@ import os
 import math
 import base64
 import pickle
-from support.token_extractor import extract_tokens
+from support.vector import vectorize_document
+from support.vector import euclidean_norm
 
 class Ranker:
     def __init__(self, search_term, index_path):
@@ -51,16 +52,3 @@ class Ranker:
         @return list:  A list of tupples representing the term's search results
         """
         return self.search_results
-
-def vectorize_document(doc_path):
-    """
-    @param doc_path: The path to a file representing
-                     a document in the corpus
-    @return list:    An n-dimensional vector of term frequencies
-                     where n is the number of unique terms in the document.
-    """
-    counts = dict()
-    tokens = extract_tokens(os.path.abspath(doc_path))
-    for token in tokens:
-        counts[token] = counts[token] + 1 if token in counts else 1
-    return counts.values()

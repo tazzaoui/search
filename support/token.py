@@ -10,6 +10,18 @@ from bs4 import BeautifulSoup
 import nltk
 from nltk.stem.snowball import SnowballStemmer
 
+def exclusion_policy(element):
+    '''
+    Defines the exclusion policy for html text extraction
+    '''
+    if element.parent.name in ['style', 'script', '[document]', 'head']:
+        return False
+    elif re.match('<!--.*-->', str(element.encode('utf-8'))):
+        return False
+    elif element.isspace():
+        return False
+    return True
+
 def extract_tokens(path):
     '''
     - Given the name of a document located in self.path, this method
@@ -32,15 +44,3 @@ def extract_tokens(path):
     for word in words:
         terms[word] = 1 if word not in terms else terms[word] + 1
     return set([(terms[i], i) for i in words])
-
-def exclusion_policy(element):
-    '''
-    Defines the exclusion policy for html text extraction
-    '''
-    if element.parent.name in ['style', 'script', '[document]', 'head']:
-        return False
-    elif re.match('<!--.*-->', str(element.encode('utf-8'))):
-        return False
-    elif element.isspace():
-        return False
-    return True
