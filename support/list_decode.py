@@ -15,4 +15,4 @@ if __name__ == "__main__":
         exit(1)
 
     for f in os.listdir(sys.argv[1]):
-        print(base64.b16decode(f).decode())
+        print(base64.b16decode(f).decode("latin-1"))

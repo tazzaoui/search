@@ -18,38 +18,48 @@ class Vector:
     This class implementats the vector operations
     used for modeling the corpus and ranking documents.
     """
-    def __init__(self, doc_path):
+    def __init__(self, index_path, doc_id):
         """
         @param doc_path: The path to a file representing
                          a document in the corpus
         """
-        doc_path = os.path.abspath(doc_path)
+        index_path = os.path.abspath(index_path)
+        print("Index Path: {}".format(index_path))
+        doc_path = os.path.join(index_path, doc_id)
+        print("Doc Path: {}".format(doc_path))
         assert os.path.exists(doc_path), "No such path: {}".format(doc_path)
-        num_docs = len(os.listdir(os.path.join(doc_path, "..")))
-
+        num_docs = len(os.listdir(index_path))
+        print("Number of docs: {}".format(num_docs))
         if not os.path.exists("unique_terms.pickle"):
-            unique_terms = set()
-            for term_file in os.listdir(doc_path):
-                unique_terms.add(base64.b16decode(term_file))
+            unique_terms = os.listdir(index_path)
+            unique_terms.remove("query")
+            unique_terms = [base64.b16decode(term).lower() for term in unique_terms]
             with open("unique_terms.pickle", "wb") as output_file:
                 pickle.dump(list(unique_terms), output_file)
         else:
             with open("unique_terms.pickle", "rb") as input_file:
                 unique_terms = pickle.load(input_file)
-
-        tokens = extract_tokens(doc_path)
+        tokens = [toks.encode() for (freqs, toks) in extract_tokens(doc_path)]
+        print("tokens: {}".format(tokens))
         values = list()
-        for term in unique_terms:
-            if term in tokens:
-                term_obj = Term(term)
-                doc_freq = term_obj.get_document_frequency()
-                inv_document_freq = np.log(num_docs/doc_freq)
-                doc_id = doc_path.split("/")[-1].strip()
-                term_frequency = term.get_term_frequency()[doc_id]
-                values.append(term_frequency * inv_document_freq)
-            else:
+        for tok in unique_terms:
+            found = False
+            for term in tok.split():
+                print(term)
+                if term in tokens:
+                    print("FOUND TOKEN")
+                    term_obj = Term(term)
+                    doc_freq = term_obj.get_document_frequency()
+                    inv_document_freq = np.log(num_docs/doc_freq)
+                    doc_id = doc_path.split("/")[-1].strip()
+                    term_frequency = term.get_term_frequency()[doc_id]
+                    values.append(term_frequency * inv_document_freq)
+                    found = True
+                    break
+            if not found:
                 values.append(0)
         self.__values = np.array(values)
+        print("Values: {}".format(self.__values))
 
     def euclidean_norm(self):
         """

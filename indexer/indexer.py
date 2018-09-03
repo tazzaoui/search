@@ -13,7 +13,7 @@ import base64
 import pickle
 import logging
 from progress.bar import IncrementalBar
-from support.token import extract_tokens
+from support.token_extract import extract_tokens
 
 class Indexer:
     def __init__(self, verbose=False, path=None):

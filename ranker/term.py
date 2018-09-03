@@ -34,11 +34,11 @@ class Term:
         Search if a term exists, if so, return a list of tuples
         (x, y) s.t. x = a document & y = the term's document frequency
         """
-        encoded_term = base64.b16encode(self.__term)
+        encoded_term = base64.b16encode(self.__term.encode())
         index_path = os.path.abspath(self.__index_path)
         term_file = os.path.join(index_path, encoded_term.decode())
         if not os.path.exists(term_file):
-            return None
+            return list()
         with open(term_file, "rb") as index_file:
             return pickle.load(index_file)
 
