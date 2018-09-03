@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 import nltk
 from nltk.stem.snowball import SnowballStemmer
 
+
 def exclusion_policy(element):
     '''
     Defines the exclusion policy for html text extraction
@@ -22,9 +23,10 @@ def exclusion_policy(element):
         return False
     return True
 
+
 def extract_tokens(path):
     '''
-    - Given the name of a document located in self.path, this method
+    - Given the path to a document, this method
     extracts its contents and returns a list of pairs
     [(x, y) | x = the frequency of the token, y = the token itself].
     '''

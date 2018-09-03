@@ -15,8 +15,8 @@ class Term:
     """
 
     def __init__(self, search_term):
-        self.__term = str(search_term)
-        self.__index_path = "../../index" #TODO: hard-coded (fix me)
+        self.__term = search_term.decode()
+        self.__index_path = "../indexer/index"  # TODO: hard-coded (fix me)
 
         search_result = self.search()
         self.__exists = bool(search_result is not None)
@@ -38,6 +38,8 @@ class Term:
         index_path = os.path.abspath(self.__index_path)
         term_file = os.path.join(index_path, encoded_term.decode())
         if not os.path.exists(term_file):
+            print("TERM FILE DOESN'T EXIST!!!")
+            exit(0)
             return list()
         with open(term_file, "rb") as index_file:
             return pickle.load(index_file)
@@ -70,7 +72,6 @@ class Term:
                      i.e. The # of docs containing the term
         """
         return self.__doc_frequency
-
 
     def exists(self):
         """

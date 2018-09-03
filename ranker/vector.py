@@ -13,53 +13,51 @@ import numpy as np
 from ranker.term import Term
 from support.token_extract import extract_tokens
 
+
 class Vector:
     """
-    This class implementats the vector operations
+    This class implements the vector operations
     used for modeling the corpus and ranking documents.
     """
-    def __init__(self, index_path, doc_id):
+
+    def __init__(self, doc_id):
         """
         @param doc_path: The path to a file representing
                          a document in the corpus
         """
-        index_path = os.path.abspath(index_path)
-        print("Index Path: {}".format(index_path))
-        doc_path = os.path.join(index_path, doc_id)
-        print("Doc Path: {}".format(doc_path))
+        index_path = os.path.abspath("../indexer/index")
+        raw_path = os.path.abspath("../indexer/raw")
+        doc_path = os.path.join(raw_path, doc_id)
+        self.__doc_id = doc_id
         assert os.path.exists(doc_path), "No such path: {}".format(doc_path)
         num_docs = len(os.listdir(index_path))
-        print("Number of docs: {}".format(num_docs))
         if not os.path.exists("unique_terms.pickle"):
             unique_terms = os.listdir(index_path)
             unique_terms.remove("query")
-            unique_terms = [base64.b16decode(term).lower() for term in unique_terms]
+            unique_terms = [base64.b16decode(
+                term).lower() for term in unique_terms]
             with open("unique_terms.pickle", "wb") as output_file:
                 pickle.dump(list(unique_terms), output_file)
         else:
             with open("unique_terms.pickle", "rb") as input_file:
                 unique_terms = pickle.load(input_file)
         tokens = [toks.encode() for (freqs, toks) in extract_tokens(doc_path)]
-        print("tokens: {}".format(tokens))
         values = list()
-        for tok in unique_terms:
-            found = False
-            for term in tok.split():
-                print(term)
-                if term in tokens:
-                    print("FOUND TOKEN")
-                    term_obj = Term(term)
-                    doc_freq = term_obj.get_document_frequency()
-                    inv_document_freq = np.log(num_docs/doc_freq)
-                    doc_id = doc_path.split("/")[-1].strip()
-                    term_frequency = term.get_term_frequency()[doc_id]
-                    values.append(term_frequency * inv_document_freq)
-                    found = True
-                    break
-            if not found:
+        for term in unique_terms:
+            if term in tokens:
+                term_obj = Term(term)
+                doc_freq = term_obj.get_document_frequency()
+                inv_document_freq = np.log(num_docs / doc_freq)
+                doc_id = doc_path.split("/")[-1].strip()
+                if doc_id == "query":
+                    term_frequency = tokens.count(term)
+                else:
+                    term_frequency = term_obj.get_term_frequencies()[
+                        doc_id.encode()]
+                values.append(term_frequency * inv_document_freq)
+            else:
                 values.append(0)
         self.__values = np.array(values)
-        print("Values: {}".format(self.__values))
 
     def euclidean_norm(self):
         """
@@ -88,6 +86,12 @@ class Vector:
         """
         return self.__values
 
+    def get_doc_id(self):
+        """
+        @return str: The document-id associated with the vector
+        """
+        return self.__doc_id
+
     def __mul__(self, other):
         """
         @param other: Multiplication is defined for
@@ -100,5 +104,6 @@ class Vector:
             return other * self.__values
         if isinstance(other, Vector):
             assert len(self.__values) == len(other.get_values())
-            return np.dot(self.__values(), other.get_values())
-        raise ValueError("Vector multiplication is defined only for scalars or other vectors")
+            return np.dot(self.__values, other.get_values())
+        raise ValueError(
+            "Vector multiplication is defined only for scalars or other vectors")

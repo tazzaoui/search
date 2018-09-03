@@ -15,6 +15,7 @@ import logging
 from progress.bar import IncrementalBar
 from support.token_extract import extract_tokens
 
+
 class Indexer:
     def __init__(self, verbose=False, path=None):
         self.logger = logging.getLogger("indexer")
