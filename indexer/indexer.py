@@ -21,8 +21,7 @@ class Indexer:
         self.logger = logging.getLogger("indexer")
         self.logger.setLevel(logging.DEBUG)
         fh = logging.FileHandler("indexer.log")
-        fh.setFormatter(logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        fh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
         self.logger.addHandler(fh)
         self.verbose = verbose
         self.path = path

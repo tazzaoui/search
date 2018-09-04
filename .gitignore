@@ -7,8 +7,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
-.Python
-build/
+.Python build/
 develop-eggs/
 dist/
 downloads/
@@ -105,3 +104,9 @@ venv.bak/
 
 *.csv
 *~
+
+# documents
+indexer/docs
+indexer/raw
+indexer/index
+*.pickle
