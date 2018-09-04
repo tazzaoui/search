@@ -25,7 +25,12 @@
     </form> 
       </div>
       <div>
-    <h1>Result: {{ res }}</h1>
+          <h1>Found {{num_results}} results in {{elapsed_time}} seconds</h1>
+          <ol>
+            {% for path, sim in res %}
+            <li> <h2> {{ path }}     [{{sim}}]</h2></li> 
+            {% endfor %} 
+          </ol>
       </div>
     </div>
   </body>
