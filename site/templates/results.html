@@ -2,36 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <link href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css" rel="stylesheet">
+  <link href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css"
+  rel="stylesheet">
   <title>Wikipedia Search</title>
 </head>
-
-<body> 
-    <div class="container">
+<body>
+  <div class="container">
     <div style="background:transparent !important" class="jumbotron">
-        <div>  
-              <img align="middle" src="../static/wikipedia-wide.png">
-      </div>
+      <div><img align="middle" src="../static/wikipedia-wide.png"></div>
     </div>
     <form action="/search/results" method="post">
       <div class="input-group">
-        <input type="text" class="form-control input-lg" name="input" placeholder="Search" autofocus>
+        <input type="text" class="form-control input-lg" name="input"
+        placeholder="Search" autofocus="">
         <div class="input-group-btn">
-          <button class="btn btn-primary btn-lg" type="submit">
-            <i class="glyphicon glyphicon-search"></i>
-          </button>
+         <button class="btn btn-primary btn-lg" type="submit">
+         <i class="glyphicon glyphicon-search"></i>
         </div>
       </div>
-    </form> 
-      </div>
-      <div>
-          <h1>Found {{num_results}} results in {{elapsed_time}} seconds</h1>
-          <ol>
-            {% for path, sim in res %}
-            <li> <h2> {{ path }}     [{{sim}}]</h2></li> 
-            {% endfor %} 
-          </ol>
-      </div>
-    </div>
-  </body>
+    </form>
+  </div>
+  <div class="container">
+    <h1>Found {{num_results}} results in {{elapsed_time}} seconds</h1> 
+    <table class="table" style="font-size: 150%">
+      <thead>
+        <tr>
+          <th>Article</th>
+          <th>Similarity</th>
+        </tr>
+      </thead>
+      {% for path, sim in res %}
+      <tbody>
+        <tr>
+          <th scope="row">
+            <a href="{{ path }}"> 
+            {{ path.split("https://en.wikipedia.org/wiki/")[1].replace("_"," ") }}
+            </a>
+          </th>
+          <td>{{ sim }}</td>
+        </tr>
+      </tbody>
+    {% endfor %}
+    </table>
+  </div>
+</body>
 </html>
