@@ -38,8 +38,6 @@ class Term:
         index_path = os.path.abspath(self.__index_path)
         term_file = os.path.join(index_path, encoded_term.decode())
         if not os.path.exists(term_file):
-            print("TERM FILE DOESN'T EXIST!!!")
-            exit(0)
             return list()
         with open(term_file, "rb") as index_file:
             return pickle.load(index_file)

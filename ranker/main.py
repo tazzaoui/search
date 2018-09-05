@@ -9,21 +9,24 @@ from ranker.vector import Vector
 from support.token_extract import extract_tokens
 
 
-def main(index_path, search_term):
+def main(index_path, search_query):
     with open("../indexer/index/query", "w") as query_file:
-        query_file.write("{}\n".format(search_term))
+        query_file.write("{}\n".format(search_query.lower()))
     query_tokens = extract_tokens(os.path.join(index_path, "query"))
     query = Vector("query")
     similarity = dict()
-    t = Term(search_term.encode())
-    search_results = t.search()
+    search_results = list()
+    for term in search_query.split(" "):
+        t = Term(term.encode())
+        search_results.append(t.search())
+    search_results = [x for y in search_results for x in y]
     if search_results is None:
         return list()
     else:
         for document in [y for (x, y) in search_results]:
             vec = Vector(document.decode())
             similarity[document] = query.cosine_similarity(vec)
-    return sorted(similarity.items(), key=lambda x: x[1], reverse=True)
+        return sorted(similarity.items(), key=lambda x: x[1], reverse=True)
 
 
 def file_to_link(path):
@@ -49,7 +52,7 @@ if __name__ == "__main__":
     search_term = input("Please enter your query: ")
     print("Searching...\n")
     initial_time = time.time()
-    results = main(path, search_term)
+    results = main(path,search_term)
     for path, sim in results:
         print(
             "[{}]\t{}".format(

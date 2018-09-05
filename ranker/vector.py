@@ -52,8 +52,10 @@ class Vector:
                 if doc_id == "query":
                     term_frequency = tokens.count(term)
                 else:
-                    term_frequency = term_obj.get_term_frequencies()[
-                        doc_id.encode()]
+                    try:
+                        term_frequency = term_obj.get_term_frequencies()[doc_id.encode()]
+                    except KeyError:
+                        pass
                 values.append(term_frequency * inv_document_freq)
             else:
                 values.append(0)
