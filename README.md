@@ -1,6 +1,8 @@
 # wikisearch
 > A search engine for the Wikipedia corpus
 
+<div style="text-align:center"><img src ="screenshot.png" /></div>
+
 ## Features
 
 1. Parser - Parses the Wikipedia data dump & extracts the text from each article
