@@ -8,7 +8,6 @@ from ranker.term import Term
 from ranker.vector import Vector
 from support.token_extract import extract_tokens
 
-
 def main(index_path, search_query):
     with open("../indexer/index/query", "w") as query_file:
         query_file.write("{}\n".format(search_query.lower()))
@@ -28,7 +27,6 @@ def main(index_path, search_query):
             similarity[document] = query.cosine_similarity(vec)
         return sorted(similarity.items(), key=lambda x: x[1], reverse=True)
 
-
 def file_to_link(path):
     """
     Given a raw Wikipedia article, this method extracts its title,
@@ -38,7 +36,6 @@ def file_to_link(path):
         header = article.readline()
     title = header[7:]
     return "https://en.wikipedia.org/wiki/" + title.replace(" ", "_")
-
 
 if __name__ == "__main__":
     default_docs_path = os.path.abspath("../../test-index")
