@@ -5,7 +5,7 @@
 
 ## Features
 
-1. Parser - Parses the Wikipedia data dump & extracts the text from each article
+1. Parser - Parses the most recent Wikipedia data dump & extracts the text from each article
 * After pulling the Wikipedia data dump (~50 GB uncompressed), the parser extracts and saves each article to disk. The name of the file that contains an article is the hex-encoded title of the article.
 
 2. Indexer - Builds an inverted index and computes the frequency of each token in every article. The tokenization process includes...
