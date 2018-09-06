@@ -26,7 +26,7 @@ class Vector:
                          a document in the corpus
         """
         index_path = os.path.abspath("../indexer/index")
-        raw_path = os.path.abspath("../indexer/raw")
+        raw_path = os.path.abspath("../indexer/tokenized-raw")
         doc_path = os.path.join(raw_path, doc_id)
         self.__doc_id = doc_id
         assert os.path.exists(doc_path), "No such path: {}".format(doc_path)
@@ -41,9 +41,12 @@ class Vector:
         else:
             with open("unique_terms.pickle", "rb") as input_file:
                 unique_terms = pickle.load(input_file)
-        tokens = [toks.encode() for (freqs, toks) in extract_tokens(doc_path)]
-        values = list()
-        for term in unique_terms:
+        num_terms = len(unique_terms)
+        with open(doc_path, "r") as toks:
+            tokens = [t.strip().encode() for t in toks.readlines()]
+        self.__values = np.zeros((num_terms, ), dtype=float)
+        for i in range(num_terms):
+            term = unique_terms[i]
             if term in tokens:
                 term_obj = Term(term)
                 doc_freq = term_obj.get_document_frequency()
@@ -56,10 +59,7 @@ class Vector:
                         term_frequency = term_obj.get_term_frequencies()[doc_id.encode()]
                     except KeyError:
                         pass
-                values.append(term_frequency * inv_document_freq)
-            else:
-                values.append(0)
-        self.__values = np.array(values)
+                self.__values[i] = (term_frequency * inv_document_freq)
 
     def euclidean_norm(self):
         """
