@@ -4,8 +4,8 @@ import os
 import base64
 
 input_files = os.path.abspath("docs")
-output_dir = os.path.abspath("output-docs")
-os.system("rm -rf output-docs; mkdir output-docs")
+output_dir = os.path.abspath("raw")
+os.system("rm -rf raw; mkdir raw")
 
 for input_file in os.listdir(input_files):
     with open(os.path.join(input_files, input_file), "rb") as f:
